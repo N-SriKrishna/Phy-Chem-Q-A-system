@@ -1,8 +1,19 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-import nest_asyncio
-nest_asyncio.apply()
+# Import asyncio first
+import asyncio
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except RuntimeError:
+    # Create new event loop if there isn't one
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        nest_asyncio.apply()
+    except Exception as e:
+        print(f"Asyncio setup error: {e}")
 
 import streamlit as st
 import pandas as pd
@@ -11,14 +22,25 @@ from transformers import TFT5ForConditionalGeneration, T5Tokenizer
 import tensorflow as tf
 from datetime import datetime
 
+# Initialize event loop for async operations
+@st.cache_resource
+def initialize_async():
+    try:
+        if not asyncio.get_event_loop().is_running():
+            asyncio.set_event_loop(asyncio.new_event_loop())
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+# Call initialization
+initialize_async()
+
 # Initialize tokenizer with specific parameters
 try:
     tokenizer = T5Tokenizer.from_pretrained("t5-base", 
                                           model_max_length=512,
-                                          legacy=True)  # Add legacy=True
+                                          legacy=True)
 except Exception as e:
     st.error(f"Error loading tokenizer: {str(e)}")
-  
 def get_topic_unit_mapping():
     return {
         # PHYSICS UNITS
