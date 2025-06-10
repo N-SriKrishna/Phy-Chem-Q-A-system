@@ -1,5 +1,5 @@
 import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+from pathlib import Path
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -327,12 +327,19 @@ class QASystem:
     def __init__(self, model_path='my_qa_model_tf'):
         """Initialize the QA system with model and data."""
         try:
-            # Initialize tokenizer and model
+            # Get the absolute path to the model directory
+            current_dir = Path(__file__).parent
+            model_path = str(current_dir / model_path)
+
+            st.write(f"Loading model from: {model_path}")
+            st.write("Available files:", os.listdir(model_path))
+
+            # Initialize tokenizer from local path
             self.tokenizer = T5Tokenizer.from_pretrained(
                 model_path,
                 model_max_length=512,
-                legacy=True
-                
+                legacy=True,
+                local_files_only=True
             )
             self.model = TFT5ForConditionalGeneration.from_pretrained(model_path)
             
