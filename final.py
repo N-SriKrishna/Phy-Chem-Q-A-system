@@ -328,7 +328,11 @@ class QASystem:
         """Initialize the QA system with model and data."""
         try:
             # Initialize tokenizer and model
-            self.tokenizer = T5Tokenizer.from_pretrained(model_path)
+            self.tokenizer = T5Tokenizer.from_pretrained(
+                "t5-base",  # Use t5-base instead of local path for tokenizer
+                model_max_length=512,
+                legacy=True
+            )
             self.model = TFT5ForConditionalGeneration.from_pretrained(model_path)
             
             # Load and organize data
