@@ -446,25 +446,6 @@ class QASystem:
             st.error(f"Error getting topic content: {str(e)}")
             return ""
 
-    def preprocess_question(self, question):
-        """Preprocess the question for better understanding."""
-        try:
-            # Remove extra whitespace
-            question = ' '.join(question.split())
-            
-            # Add question mark if missing
-            if not question.endswith('?'):
-                question += '?'
-            
-            # Add common prefixes for better model understanding
-            if not any(question.lower().startswith(prefix) for prefix in ['what', 'how', 'why', 'when', 'where', 'who', 'explain']):
-                question = f"Explain {question}"
-            
-            return question
-        except Exception as e:
-            st.error(f"Error preprocessing question: {str(e)}")
-            return question
-
     def generate_answer(self, context, question):
         """Generate an answer for the given question and context."""
         try:
@@ -474,10 +455,6 @@ class QASystem:
             
             # Preprocess input
             input_text = f"question: {question} context: {context}"
-            
-            # Add debug information
-            st.write("Generating answer...")
-            st.write(f"Input length: {len(input_text)}")
             
             # Tokenize input
             inputs = self.tokenizer(
@@ -510,6 +487,24 @@ class QASystem:
             st.error(f"Error generating answer: {str(e)}")
             return "Sorry, there was an error generating the answer. Please try again."
 
+    def cleanup_answer(self, answer):
+        """Clean up the generated answer."""
+        try:
+            # Remove extra whitespace
+            answer = ' '.join(answer.split())
+            
+            # Ensure proper capitalization
+            answer = answer[0].upper() + answer[1:]
+            
+            # Ensure proper punctuation
+            if not answer.endswith(('.', '?', '!')):
+                answer += '.'
+            
+            return answer
+        except Exception as e:
+            st.error(f"Error cleaning up answer: {str(e)}")
+            return answer
+
     def calculate_confidence(self, answer):
         """Calculate confidence score for the generated answer."""
         try:
@@ -528,41 +523,6 @@ class QASystem:
         except Exception as e:
             st.error(f"Error calculating confidence: {str(e)}")
             return 0.5
-
-    def validate_answer(self, answer):
-        """Validate the generated answer."""
-        try:
-            # Check minimum length
-            if len(answer.split()) < self.min_answer_length:
-                return False
-            
-            # Check for common error indicators
-            error_indicators = ['error', 'sorry', 'apologize', 'couldn\'t', 'cannot']
-            if any(indicator in answer.lower() for indicator in error_indicators):
-                return False
-            
-            return True
-        except Exception as e:
-            st.error(f"Error validating answer: {str(e)}")
-            return False
-
-    def cleanup_answer(self, answer):
-        """Clean up the generated answer."""
-        try:
-            # Remove extra whitespace
-            answer = ' '.join(answer.split())
-            
-            # Ensure proper capitalization
-            answer = answer[0].upper() + answer[1:]
-            
-            # Ensure proper punctuation
-            if not answer.endswith(('.', '?', '!')):
-                answer += '.'
-            
-            return answer
-        except Exception as e:
-            st.error(f"Error cleaning up answer: {str(e)}")
-            return answer
 
     def save_to_history(self, subject, unit, topic, question, answer, difficulty):
         """Save QA interaction to history."""
