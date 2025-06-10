@@ -1,10 +1,24 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+import nest_asyncio
+nest_asyncio.apply()
+
 import streamlit as st
 import pandas as pd
-from transformers import TFT5ForConditionalGeneration, T5Tokenizer
-import tensorflow as tf
 import numpy as np
+from transformers import T5ForConditionalGeneration, T5Tokenizer
+import torch
 from datetime import datetime
 
+# Initialize tokenizer with specific parameters
+try:
+    tokenizer = T5Tokenizer.from_pretrained("t5-base", 
+                                          model_max_length=512,
+                                          legacy=True)  # Add legacy=True
+except Exception as e:
+    st.error(f"Error loading tokenizer: {str(e)}")
+  
 def get_topic_unit_mapping():
     return {
         # PHYSICS UNITS
