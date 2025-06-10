@@ -1,46 +1,49 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# Import asyncio first
+import streamlit as st
+
+# Set page config FIRST, before any other Streamlit commands
+st.set_page_config(
+    page_title="Physics & Chemistry QA System",
+    page_icon="🔬",
+    layout="wide"
+)
+
+# Then import other libraries
 import asyncio
 try:
     import nest_asyncio
     nest_asyncio.apply()
 except RuntimeError:
-    # Create new event loop if there isn't one
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         nest_asyncio.apply()
     except Exception as e:
-        print(f"Asyncio setup error: {e}")
+        st.error(f"Asyncio setup error: {e}")
 
-import streamlit as st
 import pandas as pd
 import numpy as np
 from transformers import TFT5ForConditionalGeneration, T5Tokenizer
 import tensorflow as tf
 from datetime import datetime
 
-# Initialize event loop for async operations
+# Initialize tokenizer
 @st.cache_resource
-def initialize_async():
+def initialize_tokenizer():
     try:
-        if not asyncio.get_event_loop().is_running():
-            asyncio.set_event_loop(asyncio.new_event_loop())
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
+        return T5Tokenizer.from_pretrained(
+            "t5-base",
+            model_max_length=512,
+            legacy=True
+        )
+    except Exception as e:
+        st.error(f"Error loading tokenizer: {str(e)}")
+        return None
 
-# Call initialization
-initialize_async()
+tokenizer = initialize_tokenizer()
 
-# Initialize tokenizer with specific parameters
-try:
-    tokenizer = T5Tokenizer.from_pretrained("t5-base", 
-                                          model_max_length=512,
-                                          legacy=True)
-except Exception as e:
-    st.error(f"Error loading tokenizer: {str(e)}")
 def get_topic_unit_mapping():
     return {
         # PHYSICS UNITS
@@ -583,7 +586,6 @@ class QASystem:
             return None
         
 def main():
-    st.set_page_config(page_title="Physics & Chemistry QA System", page_icon="🔬", layout="wide")
     
     # Custom CSS
     st.markdown("""
