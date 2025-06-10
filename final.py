@@ -352,35 +352,42 @@ class QASystem:
     def __init__(self, model_path='my_qa_model_tf'):
         """Initialize the QA system with model and data."""
         try:
-            # Print available files for debugging
             st.write(f"Loading model from: {model_path}")
             st.write("Available files:", os.listdir(model_path))
-            
-            # Initialize tokenizer and model directly from tf-base
+
+            # Initialize tokenizer from the saved files
             self.tokenizer = T5Tokenizer.from_pretrained(
-                "t5-base",
+                model_path,
                 model_max_length=512,
-                legacy=True
+                legacy=True,
+                local_files_only=True
             )
-            
-            # Load model config first
-            config_path = os.path.join(model_path, "config.json")
-            if not os.path.exists(config_path):
-                raise ValueError(f"Config file not found at {config_path}")
-            
-            # Initialize model with TensorFlow
+
+            # Initialize model from base configuration
             self.model = TFT5ForConditionalGeneration.from_pretrained(
-                "t5-base"  # First load base model
+                "t5-base",  # Start with base model
+                from_pt=False  # Specify we're using TensorFlow
             )
-            
-            # Load your trained weights
-            model_path = os.path.join(model_path, "tf_model.h5")
-            if not os.path.exists(model_path):
-                raise ValueError(f"Model file not found at {model_path}")
-            
-            # Load the weights
-            self.model.load_weights(model_path)
-            
+
+            # Custom load weights
+            try:
+                # Load the model weights
+                model_path = os.path.join(model_path, "tf_model.h5")
+                
+                # Load with custom_objects if needed
+                custom_objects = {
+                    'TFT5ForConditionalGeneration': TFT5ForConditionalGeneration,
+                    'TFT5MainLayer': self.model.t5.main_layer.__class__
+                }
+                
+                self.model.load_weights(model_path, by_name=True, skip_mismatch=True)
+                st.success("Model weights loaded successfully!")
+                
+            except Exception as e:
+                st.warning(f"Error loading weights: {str(e)}")
+                st.warning("Using base t5-small model instead")
+                self.model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+
             # Load and organize data
             self.df = load_and_organize_data()
             
@@ -390,8 +397,6 @@ class QASystem:
             self.min_answer_length = 5
             self.temperature = 0.7
             self.num_beams = 4
-            
-            st.success("Model initialized successfully!")
             
         except Exception as e:
             st.error(f"Error initializing QA System: {str(e)}")
@@ -483,21 +488,26 @@ class QASystem:
             # Preprocess input
             input_text = f"question: {question} context: {context}"
             
+            # Add debug information
+            st.write("Generating answer...")
+            st.write(f"Input length: {len(input_text)}")
+            
             # Tokenize input
             inputs = self.tokenizer(
                 input_text,
-                return_tensors='tf',  # Change to tf
+                return_tensors='tf',
                 max_length=self.max_input_length,
                 truncation=True,
                 padding='max_length'
             )
             
-            # Generate answer using TensorFlow
+            # Generate answer
             outputs = self.model.generate(
                 inputs.input_ids,
+                attention_mask=inputs.attention_mask,
                 max_length=self.max_output_length,
-                num_beams=4,
-                temperature=0.8,
+                num_beams=self.num_beams,
+                temperature=self.temperature,
                 top_k=50,
                 top_p=0.95,
                 no_repeat_ngram_size=2,
