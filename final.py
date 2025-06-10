@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -7,8 +7,8 @@ nest_asyncio.apply()
 import streamlit as st
 import pandas as pd
 import numpy as np
-from transformers import T5ForConditionalGeneration, T5Tokenizer
-import torch
+from transformers import TFT5ForConditionalGeneration, T5Tokenizer
+import tensorflow as tf
 from datetime import datetime
 
 # Initialize tokenizer with specific parameters
@@ -327,21 +327,18 @@ class QASystem:
     def __init__(self, model_path='my_qa_model_tf'):
         """Initialize the QA system with model and data."""
         try:
-            # Get the absolute path to the model directory
-            current_dir = Path(__file__).parent
-            model_path = str(current_dir / model_path)
-
-            st.write(f"Loading model from: {model_path}")
-            st.write("Available files:", os.listdir(model_path))
-
-            # Initialize tokenizer from local path
+            # Initialize tokenizer with base model first
             self.tokenizer = T5Tokenizer.from_pretrained(
-                model_path,
+                "t5-base",
                 model_max_length=512,
-                legacy=True,
+                legacy=True
+            )
+            
+            # Initialize model from local path using TensorFlow
+            self.model = TFT5ForConditionalGeneration.from_pretrained(
+                model_path,
                 local_files_only=True
             )
-            self.model = TFT5ForConditionalGeneration.from_pretrained(model_path)
             
             # Load and organize data
             self.df = load_and_organize_data()
@@ -353,8 +350,12 @@ class QASystem:
             self.temperature = 0.7
             self.num_beams = 4
             
+            st.success("Model initialized successfully!")
+            
         except Exception as e:
             st.error(f"Error initializing QA System: {str(e)}")
+            st.error(f"Current directory: {os.getcwd()}")
+            st.error(f"Files in current directory: {os.listdir('.')}")
             raise
 
     def get_units(self, subject):
@@ -438,28 +439,19 @@ class QASystem:
             if not context or not question:
                 raise ValueError("Context and question cannot be empty")
             
-            # Trim context if it's too long
-            max_context_length = 1000
-            if len(context) > max_context_length:
-                context = context[:max_context_length]
-            
             # Preprocess input
             input_text = f"question: {question} context: {context}"
             
-            # Add logging
-            st.write("Generating answer...")
-            st.write(f"Question length: {len(question)}")
-            st.write(f"Context length: {len(context)}")
-            
+            # Tokenize input
             inputs = self.tokenizer(
                 input_text,
-                return_tensors='tf',
+                return_tensors='tf',  # Change to tf
                 max_length=self.max_input_length,
                 truncation=True,
                 padding='max_length'
             )
             
-            # Generate answer with more diverse parameters
+            # Generate answer using TensorFlow
             outputs = self.model.generate(
                 inputs.input_ids,
                 max_length=self.max_output_length,
@@ -468,21 +460,13 @@ class QASystem:
                 top_k=50,
                 top_p=0.95,
                 no_repeat_ngram_size=2,
-                early_stopping=True,
-                do_sample=True
+                early_stopping=True
             )
             
             # Decode answer
             answer = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Validate and clean up answer
-            if not answer or len(answer.strip()) < self.min_answer_length:
-                return "I apologize, but I couldn't generate a specific answer. Please try rephrasing your question or providing more context."
-            
-            # Clean up answer
-            answer = self.cleanup_answer(answer)
-            
-            return answer
+            return self.cleanup_answer(answer)
 
         except Exception as e:
             st.error(f"Error generating answer: {str(e)}")
