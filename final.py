@@ -327,18 +327,34 @@ class QASystem:
     def __init__(self, model_path='my_qa_model_tf'):
         """Initialize the QA system with model and data."""
         try:
-            # Initialize tokenizer with base model first
+            # Print available files for debugging
+            st.write(f"Loading model from: {model_path}")
+            st.write("Available files:", os.listdir(model_path))
+            
+            # Initialize tokenizer and model directly from tf-base
             self.tokenizer = T5Tokenizer.from_pretrained(
                 "t5-base",
                 model_max_length=512,
                 legacy=True
             )
             
-            # Initialize model from local path using TensorFlow
+            # Load model config first
+            config_path = os.path.join(model_path, "config.json")
+            if not os.path.exists(config_path):
+                raise ValueError(f"Config file not found at {config_path}")
+            
+            # Initialize model with TensorFlow
             self.model = TFT5ForConditionalGeneration.from_pretrained(
-                model_path,
-                local_files_only=True
+                "t5-base"  # First load base model
             )
+            
+            # Load your trained weights
+            model_path = os.path.join(model_path, "tf_model.h5")
+            if not os.path.exists(model_path):
+                raise ValueError(f"Model file not found at {model_path}")
+            
+            # Load the weights
+            self.model.load_weights(model_path)
             
             # Load and organize data
             self.df = load_and_organize_data()
