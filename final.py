@@ -329,9 +329,10 @@ class QASystem:
         try:
             # Initialize tokenizer and model
             self.tokenizer = T5Tokenizer.from_pretrained(
-                "t5-base",  # Use t5-base instead of local path for tokenizer
+                model_path,
                 model_max_length=512,
                 legacy=True
+                
             )
             self.model = TFT5ForConditionalGeneration.from_pretrained(model_path)
             
