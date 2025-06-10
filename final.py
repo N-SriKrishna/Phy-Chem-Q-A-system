@@ -349,45 +349,32 @@ def get_unit_prerequisites(unit):
 
 
 class QASystem:
+    class QASystem:
     def __init__(self, model_path='my_qa_model_tf'):
         """Initialize the QA system with model and data."""
         try:
-            st.write(f"Loading model from: {model_path}")
-            st.write("Available files:", os.listdir(model_path))
-
-            # Initialize tokenizer from the saved files
+            # Always use the base model tokenizer
             self.tokenizer = T5Tokenizer.from_pretrained(
-                model_path,
+                "t5-base",
                 model_max_length=512,
-                legacy=True,
-                local_files_only=True
+                legacy=True
             )
-
-            # Initialize model from base configuration
-            self.model = TFT5ForConditionalGeneration.from_pretrained(
-                "t5-base",  # Start with base model
-                from_pt=False  # Specify we're using TensorFlow
-            )
-
-            # Custom load weights
-            try:
-                # Load the model weights
-                model_path = os.path.join(model_path, "tf_model.h5")
-                
-                # Load with custom_objects if needed
-                custom_objects = {
-                    'TFT5ForConditionalGeneration': TFT5ForConditionalGeneration,
-                    'TFT5MainLayer': self.model.t5.main_layer.__class__
-                }
-                
-                self.model.load_weights(model_path, by_name=True, skip_mismatch=True)
-                st.success("Model weights loaded successfully!")
-                
-            except Exception as e:
-                st.warning(f"Error loading weights: {str(e)}")
-                st.warning("Using base t5-small model instead")
-                self.model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-
+            
+            # Initialize base model
+            self.model = TFT5ForConditionalGeneration.from_pretrained("t5-base")
+            
+            # Load weights if available
+            if os.path.exists(os.path.join(model_path, "tf_model.h5")):
+                try:
+                    self.model.load_weights(
+                        os.path.join(model_path, "tf_model.h5"),
+                        by_name=True,
+                        skip_mismatch=True
+                    )
+                except Exception as e:
+                    st.warning(f"Could not load custom weights: {e}")
+                    st.info("Using base model instead")
+            
             # Load and organize data
             self.df = load_and_organize_data()
             
@@ -398,10 +385,10 @@ class QASystem:
             self.temperature = 0.7
             self.num_beams = 4
             
+            st.success("Model initialized successfully!")
+            
         except Exception as e:
             st.error(f"Error initializing QA System: {str(e)}")
-            st.error(f"Current directory: {os.getcwd()}")
-            st.error(f"Files in current directory: {os.listdir('.')}")
             raise
 
     def get_units(self, subject):
