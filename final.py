@@ -1,48 +1,9 @@
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 import streamlit as st
-
-# Set page config FIRST, before any other Streamlit commands
-st.set_page_config(
-    page_title="Physics & Chemistry QA System",
-    page_icon="🔬",
-    layout="wide"
-)
-
-# Then import other libraries
-import asyncio
-try:
-    import nest_asyncio
-    nest_asyncio.apply()
-except RuntimeError:
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        nest_asyncio.apply()
-    except Exception as e:
-        st.error(f"Asyncio setup error: {e}")
-
 import pandas as pd
-import numpy as np
 from transformers import TFT5ForConditionalGeneration, T5Tokenizer
 import tensorflow as tf
+import numpy as np
 from datetime import datetime
-
-# Initialize tokenizer
-@st.cache_resource
-def initialize_tokenizer():
-    try:
-        return T5Tokenizer.from_pretrained(
-            "t5-base",
-            model_max_length=512,
-            legacy=True
-        )
-    except Exception as e:
-        st.error(f"Error loading tokenizer: {str(e)}")
-        return None
-
-tokenizer = initialize_tokenizer()
 
 def get_topic_unit_mapping():
     return {
@@ -349,31 +310,12 @@ def get_unit_prerequisites(unit):
 
 
 class QASystem:
-    class QASystem:
     def __init__(self, model_path='my_qa_model_tf'):
         """Initialize the QA system with model and data."""
         try:
-            # Always use the base model tokenizer
-            self.tokenizer = T5Tokenizer.from_pretrained(
-                "t5-base",
-                model_max_length=512,
-                legacy=True
-            )
-            
-            # Initialize base model
-            self.model = TFT5ForConditionalGeneration.from_pretrained("t5-base")
-            
-            # Load weights if available
-            if os.path.exists(os.path.join(model_path, "tf_model.h5")):
-                try:
-                    self.model.load_weights(
-                        os.path.join(model_path, "tf_model.h5"),
-                        by_name=True,
-                        skip_mismatch=True
-                    )
-                except Exception as e:
-                    st.warning(f"Could not load custom weights: {e}")
-                    st.info("Using base model instead")
+            # Initialize tokenizer and model
+            self.tokenizer = T5Tokenizer.from_pretrained(model_path)
+            self.model = TFT5ForConditionalGeneration.from_pretrained(model_path)
             
             # Load and organize data
             self.df = load_and_organize_data()
@@ -384,8 +326,6 @@ class QASystem:
             self.min_answer_length = 5
             self.temperature = 0.7
             self.num_beams = 4
-            
-            st.success("Model initialized successfully!")
             
         except Exception as e:
             st.error(f"Error initializing QA System: {str(e)}")
@@ -446,6 +386,25 @@ class QASystem:
             st.error(f"Error getting topic content: {str(e)}")
             return ""
 
+    def preprocess_question(self, question):
+        """Preprocess the question for better understanding."""
+        try:
+            # Remove extra whitespace
+            question = ' '.join(question.split())
+            
+            # Add question mark if missing
+            if not question.endswith('?'):
+                question += '?'
+            
+            # Add common prefixes for better model understanding
+            if not any(question.lower().startswith(prefix) for prefix in ['what', 'how', 'why', 'when', 'where', 'who', 'explain']):
+                question = f"Explain {question}"
+            
+            return question
+        except Exception as e:
+            st.error(f"Error preprocessing question: {str(e)}")
+            return question
+
     def generate_answer(self, context, question):
         """Generate an answer for the given question and context."""
         try:
@@ -453,10 +412,19 @@ class QASystem:
             if not context or not question:
                 raise ValueError("Context and question cannot be empty")
             
+            # Trim context if it's too long
+            max_context_length = 1000
+            if len(context) > max_context_length:
+                context = context[:max_context_length]
+            
             # Preprocess input
             input_text = f"question: {question} context: {context}"
             
-            # Tokenize input
+            # Add logging
+            st.write("Generating answer...")
+            st.write(f"Question length: {len(question)}")
+            st.write(f"Context length: {len(context)}")
+            
             inputs = self.tokenizer(
                 input_text,
                 return_tensors='tf',
@@ -465,45 +433,34 @@ class QASystem:
                 padding='max_length'
             )
             
-            # Generate answer
+            # Generate answer with more diverse parameters
             outputs = self.model.generate(
                 inputs.input_ids,
-                attention_mask=inputs.attention_mask,
                 max_length=self.max_output_length,
-                num_beams=self.num_beams,
-                temperature=self.temperature,
+                num_beams=4,
+                temperature=0.8,
                 top_k=50,
                 top_p=0.95,
                 no_repeat_ngram_size=2,
-                early_stopping=True
+                early_stopping=True,
+                do_sample=True
             )
             
             # Decode answer
             answer = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            return self.cleanup_answer(answer)
+            # Validate and clean up answer
+            if not answer or len(answer.strip()) < self.min_answer_length:
+                return "I apologize, but I couldn't generate a specific answer. Please try rephrasing your question or providing more context."
+            
+            # Clean up answer
+            answer = self.cleanup_answer(answer)
+            
+            return answer
 
         except Exception as e:
             st.error(f"Error generating answer: {str(e)}")
             return "Sorry, there was an error generating the answer. Please try again."
-
-    def cleanup_answer(self, answer):
-        """Clean up the generated answer."""
-        try:
-            # Remove extra whitespace
-            answer = ' '.join(answer.split())
-            
-            # Ensure proper capitalization
-            answer = answer[0].upper() + answer[1:]
-            
-            # Ensure proper punctuation
-            if not answer.endswith(('.', '?', '!')):
-                answer += '.'
-            
-            return answer
-        except Exception as e:
-            st.error(f"Error cleaning up answer: {str(e)}")
-            return answer
 
     def calculate_confidence(self, answer):
         """Calculate confidence score for the generated answer."""
@@ -524,6 +481,41 @@ class QASystem:
             st.error(f"Error calculating confidence: {str(e)}")
             return 0.5
 
+    def validate_answer(self, answer):
+        """Validate the generated answer."""
+        try:
+            # Check minimum length
+            if len(answer.split()) < self.min_answer_length:
+                return False
+            
+            # Check for common error indicators
+            error_indicators = ['error', 'sorry', 'apologize', 'couldn\'t', 'cannot']
+            if any(indicator in answer.lower() for indicator in error_indicators):
+                return False
+            
+            return True
+        except Exception as e:
+            st.error(f"Error validating answer: {str(e)}")
+            return False
+
+    def cleanup_answer(self, answer):
+        """Clean up the generated answer."""
+        try:
+            # Remove extra whitespace
+            answer = ' '.join(answer.split())
+            
+            # Ensure proper capitalization
+            answer = answer[0].upper() + answer[1:]
+            
+            # Ensure proper punctuation
+            if not answer.endswith(('.', '?', '!')):
+                answer += '.'
+            
+            return answer
+        except Exception as e:
+            st.error(f"Error cleaning up answer: {str(e)}")
+            return answer
+
     def save_to_history(self, subject, unit, topic, question, answer, difficulty):
         """Save QA interaction to history."""
         try:
@@ -543,6 +535,7 @@ class QASystem:
             return None
         
 def main():
+    st.set_page_config(page_title="Physics & Chemistry QA System", page_icon="🔬", layout="wide")
     
     # Custom CSS
     st.markdown("""
